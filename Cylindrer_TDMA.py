@@ -7,15 +7,27 @@ b = sub-diagonal vector
 a = diagonal vector
 c = super_diagonal vector 
 """
-#############################################################
-Tr=100 # temp at r=R
-q_v=100 # heat gen
-k=164 # thermal conductivity
-r=4 # radius
-n=50 # number of nodes
-##############################################################
 import numpy as np
-import pandas as pd
+from matplotlib import pyplot as plt
+
+a=[]
+b=[]
+c=[]
+
+n=50# number of nodes
+r=1
+del_r=r/(n-1)
+Tr=300 #temperature at r=R
+q=1000000
+k=205
+
+h=20000
+T_inf=273
+
+switch=1 # 0 for inverse and 1 for TDMA
+neumann=0
+dirichlet=1
+
 def TDMAsolver(a, b, c, d):
     nf = len(d) # number of equations
     ac, bc, cc, dc = map(np.array, (a, b, c, d)) # copy arrays
@@ -33,83 +45,82 @@ def TDMAsolver(a, b, c, d):
         xc[il] = (dc[il]-cc[il]*xc[il+1])/bc[il]
 
     return xc
-import matplotlib.pyplot as plt
 
-del_r=r/n
+x=np.zeros((n,n),dtype="float")
 
-m=n-1 #number of divisions.
+x[0][0]=-1
+a.append(-1)#TDMA f
+x[0][1]=1
+c.append(1) # TDMA f
 
-a=[]
-b=[]
-c=[]
+for i in range(1,n-1):
+	for j in range(0,n):
+		if i==j:
+			x[i][j] = -4*del_r*i
+			a.append(-4*del_r*i)#TDMA
 
-# b=np.array([0.004, 0.012, 0.02, 0.028, 0.036000000000000004, 0.044, 0.052000000000000005, 0.06])
-# a=np.array([1, -0.016, -0.032, -0.048, -0.064, -0.08, -0.096, -0.112, -0.06])
-# c=np.array([0, 0.012, 0.02, 0.028, 0.036000000000000004, 0.044, 0.052000000000000005, 0.06])
-# y=np.array([300, 0, 0, 0, 0, 0, 0, 0, 0])
-# t=TDMAsolver(b,a,c,y)
-# print(t)
+x[n-1][n-1]=1
+a.append(1.0)#TDMA l
 
-if q_v>0:
-	y=[0]*n
-	y[0]=Tr
-	a.append(1)
-	for i in range(1,n-1): 
-		a.append(-4*del_r*i)
-	a.append(-1)
-	for i in range(1,n-1):
-		b.append((2*del_r*i)-del_r)
-	b.append(1)
-	c.append(0)
-	for i in range(1,n-1):
-		c.append((2*del_r*i)+del_r)
+for i in range(1,n-1):
+	for j in range(0,n):
+		if i-j==1:
+			x[i][j]= 2*i*del_r-del_r
+			b.append(2*i*del_r-del_r)#TDMA
 
-	y[n-1] = -q_v/(4*k)
+b.append(0.0)#TDMA l
 
-	for i in range(1,n-1):
-		y[i]=-(q_v*del_r*del_r*del_r*2*i)/k
+for i in range(1,n-1):
+	for j in range(0,n):
+		if j-i==1:
+			x[i][j]=2*del_r*i+del_r
+			c.append(2*i*del_r+del_r)#TDMA
 
-	t=TDMAsolver(b,a,c,y)
-	print(t)
+y=[0]*n
 
-	r_x=[0]*n
+for i in range(1,n-1):
+	y[i]=-2*del_r*del_r*del_r*i*q/k
 
-	for i in range(0,n):
-		r_x[i]=(n-i)*del_r
-	plt.plot(r_x,t)
-	plt.show()
-	_x=np.array(r_x)
-	_y=np.array(t)
-	_y=_y[::-1]
-	arr= {'x':_x,'y':_y}
-	df=pd.DataFrame(arr)
-	df.to_excel("plot.xlsx",index=True)
-else:
-	a.append(1)
-	for i in range(1,n-2):
-		a.append(-4*del_r*i)
-	a.append(-4*del_r*(m-1)+2*del_r*(m-1)+del_r)
-	for i in range(1,n-1):
-		b.append((2*del_r*i)-del_r)
-	c.append(0)
-	for i in range(1,n-2):
-		c.append((2*del_r*i)+del_r)
+y[0]=-q*del_r*del_r/k
+y[0]=y[0]/4
+y[n-1]=Tr
 
-	y=[0]*(n-1)
-	y[0]=Tr
+_y=[0]*n
 
-	t=TDMAsolver(b,a,c,y)
-	print(t)
+for i in range(0,n):
+	_y[i]=i*del_r
 
-	r_x=[0]*(n-1)
+if neumann==1:
+	a[-1]=(2*del_r*h*(2*r+del_r)/k) - 4*r
+	b[-1]=4*r
+	x[n-1][n-1]=(2*del_r*h*(2*r+del_r)/k) - 4*r
+	x[n-1][n-2]=4*r
+	y[-1]=-2*r*del_r*del_r*q/k + 2*(2*r+del_r)*del_r*h*T_inf/k
+	if switch ==1:
+		f=TDMAsolver(b,a,c,y)
+		print(f)
+		plt.plot(_y,f)
+		plt.show()
+		print(x)
+	elif switch == 0:
+		x_inv=np.linalg.inv(x)
+		t=np.dot(x_inv,y)
+		print(t)
+		plt.plot(_y,t)
+		plt.show()
+if dirichlet==1:
+	if switch==0:
+		x_inv=np.linalg.inv(x)
+		t=np.dot(x_inv,y)
+		print(t)
+		plt.plot(_y,t)
+		plt.show()
 
-	for i in range(0,n-1):
-		r_x[i]=(n-1-i)*del_r
-	plt.plot(r_x,t)
-	plt.show()
+	elif switch==1:
+		f=TDMAsolver(b,a,c,y)
+		print(f)
+		plt.plot(_y,f)
+		plt.show()
 
-# print((a))
-# print((b))
-# print((c))
-# print((y))
-
+# print(x)
+# print(y)
